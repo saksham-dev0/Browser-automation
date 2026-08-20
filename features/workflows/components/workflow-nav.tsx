@@ -1,6 +1,8 @@
 "use client"
 
 import { useTransition } from "react"
+import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { PlusIcon, WorkflowIcon } from "lucide-react"
 
 import type { Workflow } from "@/lib/db/schema"
@@ -25,12 +27,19 @@ import {
 type CreateWorkflowAction = (name: string) => Promise<void>
 
 function WorkflowList({ workflows }: { workflows: Workflow[] }) {
+  const pathname = usePathname()
+
   return (
     <SidebarMenu className="gap-y-0.5">
       {workflows.map((workflow) => (
         <SidebarMenuItem key={workflow.id}>
-          <SidebarMenuButton>
-            <span>{workflow.name}</span>
+          <SidebarMenuButton
+            asChild
+            isActive={pathname === `/workflows/${workflow.id}`}
+          >
+            <Link href={`/workflows/${workflow.id}`}>
+              <span>{workflow.name}</span>
+            </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>
       ))}
