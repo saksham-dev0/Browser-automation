@@ -26,6 +26,13 @@ export async function AppSidebar({
             hidePersonal
             afterCreateOrganizationUrl="/"
             afterSelectOrganizationUrl="/"
+            afterLeaveOrganizationUrl="/"
+            appearance={{
+              elements: {
+                rootBox: "min-w-0 group-data-[collapsible=icon]:!hidden",
+                organizationSwitcherTrigger: "w-full justify-between"
+              }
+            }}
           />
         </div>
         <SidebarTrigger />
