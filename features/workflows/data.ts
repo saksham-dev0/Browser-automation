@@ -19,3 +19,13 @@ export async function createWorkflow(orgId: string, name: string) {
 
   return workflow
 }
+
+export async function getWorkflow(orgId: string, id: string) {
+  const [workflow] = await db
+    .select()
+    .from(workflows)
+    .where(and(eq(workflows.id, id), eq(workflows.orgId, orgId)))
+    .limit(1)
+
+  return workflow
+}

@@ -1,23 +1,22 @@
 "use client"
 
-import { useCallback, useSyncExternalStore } from "react"
+import { useSyncExternalStore } from "react"
 import {
-  addEdge,
   Background,
   BackgroundVariant,
   Controls,
   MiniMap,
   ReactFlow,
-  useEdgesState,
-  useNodesState,
   ConnectionLineType,
-  type Connection,
   type Edge,
   NodeTypes,
 } from "@xyflow/react"
+import { useLiveblocksFlow, Cursors } from "@liveblocks/react-flow"
 import { useTheme } from "next-themes"
 
 import "@xyflow/react/dist/style.css"
+import "@liveblocks/react-ui/styles.css"
+import "@liveblocks/react-flow/styles.css"
 
 import { StepNode } from "@/features/workflows/components/step-node"
 import type { StepNodeType } from "@/features/workflows/nodes/node-registry"
@@ -52,14 +51,18 @@ export function Canvas() {
   const { resolvedTheme } = useTheme()
   const mounted = useMounted()
   const colorMode = mounted && resolvedTheme === "dark" ? "dark" : "light"
-  const [nodes, , onNodesChange] = useNodesState(initialNodes)
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
-
-  const onConnect = useCallback(
-    (connection: Connection) =>
-      setEdges((eds) => addEdge(connection, eds)),
-    [setEdges],
-  )
+  const {
+    nodes,
+    edges,
+    onNodesChange,
+    onEdgesChange,
+    onConnect,
+    onDelete,
+  } = useLiveblocksFlow<StepNodeType, Edge>({
+    suspense: true,
+    nodes: { initial: initialNodes },
+    edges: { initial: initialEdges },
+  })
 
   return (
     <div className="size-full">
@@ -70,6 +73,7 @@ export function Canvas() {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onDelete={onDelete}
         colorMode={colorMode}
         fitView
         proOptions={{ hideAttribution: false }}
@@ -90,6 +94,7 @@ export function Canvas() {
       >
         <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
         <Controls />
+        <Cursors />
         <MiniMap pannable zoomable />
       </ReactFlow>
     </div>
