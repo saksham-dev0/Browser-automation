@@ -10,6 +10,7 @@ import {
   ConnectionLineType,
   type Edge,
   NodeTypes,
+  Panel,
 } from "@xyflow/react"
 import { useLiveblocksFlow, Cursors } from "@liveblocks/react-flow"
 import { useTheme } from "next-themes"
@@ -20,6 +21,8 @@ import "@liveblocks/react-flow/styles.css"
 
 import { StepNode } from "@/features/workflows/components/step-node"
 import type { StepNodeType } from "@/features/workflows/nodes/node-registry"
+
+import { AvatarStack } from "@liveblocks/react-ui"
 
 const nodeTypes: NodeTypes = { step: StepNode }
 
@@ -95,6 +98,9 @@ export function Canvas() {
         <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
         <Controls />
         <Cursors />
+        <Panel position="top-right">
+          <AvatarStack />
+        </Panel>
         <MiniMap pannable zoomable />
       </ReactFlow>
     </div>
