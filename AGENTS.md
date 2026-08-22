@@ -25,3 +25,11 @@ enforces the shape.
 
 This project has Trigger.dev agent skills installed in `.claude/skills/`. Before writing or changing Trigger.dev code (background tasks, scheduled tasks, realtime, or chat.agent AI agents), load the most relevant skill: `trigger-authoring-chat-agent`, `trigger-authoring-tasks`, `trigger-chat-agent-advanced`, `trigger-realtime-and-frontend`, `trigger-cost-savings`, `trigger-getting-started`.
 <!-- TRIGGER.DEV SKILLS END -->
+
+# React Flow (@xyflow/react)
+
+Do NOT write React Flow code from training data — the API has moved (v11 `reactflow` → v12 `@xyflow/react`, renamed props, changed node/edge types, new hooks). Before writing or changing anything that touches React Flow — components, hooks, node/edge types, handles, props, viewport/state APIs — fetch the docs index at https://reactflow.dev/llms.txt, then fetch the specific page(s) it lists for the API in question and follow those.
+
+Applies to: `<ReactFlow>` and its props, `useNodesState` / `useEdgesState` / `useReactFlow` / `useNodeConnections` and other hooks, custom node & edge components, `Handle`, `NodeProps` / `EdgeProps` types, `Background` / `Controls` / `MiniMap`, and anything imported from `@xyflow/react`.
+
+Local fallback if the fetch fails: read the shipped types and docs under `node_modules/@xyflow/react/`. Never guess an API name.
