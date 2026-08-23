@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ResizablePanel } from "@/components/ui/resizable"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 
 import {
@@ -84,8 +85,9 @@ function Section({
 // Editor tab — edits the fields of the selected node.
 // ---------------------------------------------------------------------------
 
-// A single editor field for a node property.
-function FieldInput({
+// A single editor field for a node property. Fields marked multiline in the
+// registry render as a textarea; everything else stays a single-line input.
+function Field({
   field,
   value,
   onChange,
@@ -94,12 +96,14 @@ function FieldInput({
   value: string
   onChange: (value: string) => void
 }) {
-  // TODO: support a multiline field variant (textarea).
+  const Control = field.multiline ? Textarea : Input
+
   return (
-    <Input
+    <Control
       id={field.key}
       value={value}
       placeholder={field.placeholder}
+      className={cn(field.multiline && "min-h-24 resize-y")}
       onChange={(e) => onChange(e.target.value)}
     />
   )
@@ -129,8 +133,9 @@ function Inspector({ node }: { node: StepNodeType | undefined }) {
             <div key={field.key} className="flex flex-col gap-1.5">
               <Label htmlFor={field.key} className="text-xs">
                 {field.label}
+                {field.required && <span className="text-destructive">*</span>}
               </Label>
-              <FieldInput
+              <Field
                 field={field}
                 value={values[field.key] ?? ""}
                 onChange={(value) => {
@@ -301,10 +306,14 @@ function RunButton() {
 export function RightSidebar() {
   const [tab, setTab] = useState("toolbar")
 
-  // TODO: read the currently selected node from React Flow.
   const selected = useStore((s) => s.nodes.find((n) => n.selected)) as StepNodeType | undefined
 
   // TODO: auto-switch to the Editor tab when the selection changes.
+  const [prevSelectedId, setPrevSelectedId] = useState<string | undefined>(selected?.id)
+  if (selected?.id !== prevSelectedId) {
+    setPrevSelectedId(selected?.id)
+    setTab("editor")
+  }
 
   return (
     <ResizablePanel
