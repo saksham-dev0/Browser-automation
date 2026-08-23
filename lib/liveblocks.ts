@@ -40,3 +40,25 @@ export async function getOrCreateWorkflowRoom({
     return null
   }
 }
+
+/**
+ * Removes the room backing a workflow. A room that was never created (404) is
+ * already in the desired state, so it is not treated as a failure.
+ */
+export async function deleteWorkflowRoom(roomId: string) {
+  try {
+    await liveblocks.deleteRoom(roomId)
+  } catch (error) {
+    if (error instanceof LiveblocksError) {
+      if (error.status === 404) return
+
+      console.error(
+        `Error deleting room ${roomId}: ${error.status} - ${error.message}`
+      )
+    } else {
+      console.error(`Unexpected error deleting room ${roomId}:`, error)
+    }
+
+    throw error
+  }
+}
