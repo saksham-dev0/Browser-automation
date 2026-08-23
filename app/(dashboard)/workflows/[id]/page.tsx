@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation"
 import { auth } from "@clerk/nextjs/server"
+import { ReactFlowProvider } from "@xyflow/react"
 
 import { getWorkflow } from "@/features/workflows/data"
 import { getOrCreateWorkflowRoom } from "@/lib/liveblocks"
@@ -23,7 +24,11 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
   return (
     <Room roomId={id}>
-      <WorkflowShell workflowId={id} />
+      {/* Above both the canvas and the sidebar, so the palette can add nodes to
+          the same React Flow store the canvas renders. */}
+      <ReactFlowProvider>
+        <WorkflowShell workflowId={id} />
+      </ReactFlowProvider>
     </Room>
   )
 }

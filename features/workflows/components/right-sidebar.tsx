@@ -1,7 +1,9 @@
 "use client"
 
 import { useState } from "react"
+import { useReactFlow, useStoreApi } from "@xyflow/react"
 import { MoreHorizontal, Play, Trash2 } from "lucide-react"
+import { toast } from "sonner"
 
 import {
   Accordion,
@@ -156,11 +158,54 @@ const sections: { kind: StepNodeKind; label: string }[] = [
 // Every node type from the registry, filtered into the groups below.
 const definitions = Object.values(nodeRegistry)
 
+// Nodes of the same type are numbered so they stay easy to tell apart ("Open URL
+// 1", "Open URL 2"). Numbering resumes after the highest number in use, so
+// deleting a node never leaves two nodes sharing a title.
+function nextTitle(nodes: StepNodeType[], type: NodeType) {
+  const { label } = nodeRegistry[type]
+  const highest = nodes.reduce((max, node) => {
+    if (node.data.type !== type) return max
+    const n = Number(node.data.title.slice(label.length + 1))
+    return Number.isInteger(n) && n > max ? n : max
+  }, 0)
+
+  return `${label} ${highest + 1}`
+}
+
 // The Toolbar tab: a button per node type that adds it to the canvas.
 function Palette() {
+  // The canvas lives in a sibling subtree, so both read the same React Flow
+  // store through the provider in the page. addNodes goes through
+  // onNodesChange, which is how the new node reaches Liveblocks.
+  const { addNodes, getNodes, getViewport } = useReactFlow<StepNodeType>()
+  const store = useStoreApi()
+
   const add = (type: NodeType) => {
-    // TODO: add the clicked node to the canvas (one trigger max).
-    void type
+    const def = nodeRegistry[type]
+    const nodes = getNodes()
+
+    if (def.kind === "trigger" && nodes.some((n) => n.data.kind === "trigger")) {
+      toast.error("A workflow can only have one trigger")
+      return
+    }
+
+    // The middle of the viewport in flow coordinates. origin centers the node on
+    // that point instead of hanging it off its top-left corner.
+    const { width, height } = store.getState()
+    const { x, y, zoom } = getViewport()
+
+    addNodes({
+      id: crypto.randomUUID(),
+      type: "step",
+      position: { x: (width / 2 - x) / zoom, y: (height / 2 - y) / zoom },
+      origin: [0.5, 0.5],
+      data: {
+        type,
+        kind: def.kind,
+        title: nextTitle(nodes, type),
+        values: {},
+      },
+    })
   }
 
   return (
