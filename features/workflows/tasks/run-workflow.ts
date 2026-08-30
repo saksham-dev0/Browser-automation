@@ -2,6 +2,8 @@ import toposort from "toposort"
 import { logger, metadata, task } from "@trigger.dev/sdk"
 import { getWorkflow } from "@/features/workflows/data"
 import type { NodeType } from "@/features/workflows/nodes/node-registry"
+import { browserbase, Stagehand } from "@browserbasehq/stagehand"
+import { nodeExecutors } from "@/features/workflows/nodes/node-executors"
 
 // One entry per node the run will walk, published to the run's metadata under
 // "steps" so the canvas — and the run console below it — can watch each node
@@ -46,14 +48,44 @@ export const runWorkflowTask = task({
 
     logger.log(`Running workflow ${workflow.name}`, { steps: order.length })
 
-    for(const id of order) {
+    // The browser session is created lazily — a graph with no browser nodes
+    // should never pay for a Browserbase session.
+    let browser: Awaited<ReturnType<typeof browserbase.launch>> | undefined
+    let stagehand: Stagehand | undefined
+    const getStagehand = async () => {
+      if (stagehand) return stagehand
+      browser = await browserbase.launch({
+        apiKey: process.env.BROWSERBASE_API_KEY!,
+        projectId: process.env.BROWSERBASE_PROJECT_ID!,
+      })
+      stagehand = await Stagehand.create({
+        browser,
+        apiKey: process.env.BROWSERBASE_API_KEY!,
+        model: { modelName: "google/gemini-2.5-flash" },
+      })
+      // Surfaced on the run so the UI can deep-link to the live session replay.
+      // sessionId is typed optional (local browsers have none) but is always set
+      // for a Browserbase browser.
+      if (browser.sessionId) {
+        metadata.set("browserbaseSessionId", browser.sessionId)
+      }
+      return stagehand
+    }
+
+    try {
+      for (const id of order) {
         const node = byId.get(id)!
         logger.log(`Running Step: ${node.data.title}`)
         // TODO: actually execute the node instead of just logging it, and report
         // its progress so the UI can watch the run live.
+        const executor = nodeExecutors[node.data.type]
+        if(executor) await executor({ values: node.data.values, getStagehand })
+      }
+    } finally {
+      await stagehand?.close()
+      await browser?.close()
     }
 
     return { step: order.length }
-
-    },
+  },
 })
