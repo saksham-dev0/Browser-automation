@@ -19,4 +19,12 @@ export default defineConfig({
     },
   },
   dirs: ["features"],
+  build: {
+    // Stagehand ships its browser extension as files on disk (dist/assets/
+    // stagehand-extension.zip, dist/extension/) and locates them relative to
+    // import.meta.url. Bundling rewrites that URL to the build output, so the
+    // extension upload to Browserbase fails with ENOENT. Keep the package
+    // external so it is installed and resolved from node_modules at runtime.
+    external: ["@browserbasehq/stagehand"],
+  },
 });
