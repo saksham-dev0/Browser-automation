@@ -2,9 +2,10 @@ import toposort from "toposort"
 import { logger, metadata, task } from "@trigger.dev/sdk"
 import { getWorkflow } from "@/features/workflows/data"
 import type { NodeType } from "@/features/workflows/nodes/node-registry"
-import { browserbase, Stagehand } from "@browserbasehq/stagehand"
+import { Stagehand } from "@browserbasehq/stagehand"
 import { nodeExecutors } from "@/features/workflows/nodes/node-executors"
 import { interpolate } from "@/features/workflows/lib/interpolate"
+
 
 // One entry per node the run will walk, published to the run's metadata under
 // "steps" so the canvas — and the run console below it — can watch each node
@@ -69,26 +70,37 @@ export const runWorkflowTask = task({
 
     // The browser session is created lazily — a graph with no browser nodes
     // should never pay for a Browserbase session.
-    let browser: Awaited<ReturnType<typeof browserbase.launch>> | undefined
+    //
+    // v3, not v4, on purpose: with env "BROWSERBASE" every act/extract/observe
+    // and the whole agent loop execute server-side on Browserbase, which is what
+    // fills the Stagehand tab of the session inspector. v4 runs them in a
+    // browser-side worker driven from this process, and Browserbase never sees
+    // them.
     let stagehand: Stagehand | undefined
     const getStagehand = async () => {
       if (stagehand) return stagehand
-      browser = await browserbase.launch({
+      const instance = new Stagehand({
+        env: "BROWSERBASE",
         apiKey: process.env.BROWSERBASE_API_KEY!,
         projectId: process.env.BROWSERBASE_PROJECT_ID!,
+        // No provider key, so inference routes through Browserbase's Model
+        // Gateway and bills to the Browserbase key.
+        model: "google/gemini-2.5-flash",
+        verbose: 1,
+        logger: (line) => {
+          logger.log(`[stagehand] ${line.message}`, {
+            category: line.category,
+            ...line.auxiliary,
+          })
+        },
       })
-      stagehand = await Stagehand.create({
-        browser,
-        apiKey: process.env.BROWSERBASE_API_KEY!,
-        model: { modelName: "google/gemini-2.5-flash" },
-      })
+      await instance.init()
+      stagehand = instance
       // Surfaced on the run so the UI can deep-link to the live session replay.
-      // sessionId is typed optional (local browsers have none) but is always set
-      // for a Browserbase browser.
-      if (browser.sessionId) {
-        metadata.set("browserbaseSessionId", browser.sessionId)
+      if (instance.browserbaseSessionID) {
+        metadata.set("browserbaseSessionId", instance.browserbaseSessionID)
       }
-      return stagehand
+      return instance
     }
 
     // Every executed node's result, keyed by node id, so a later node can pull
@@ -144,8 +156,16 @@ export const runWorkflowTask = task({
         }
       }
     } finally {
-      await stagehand?.close()
-      await browser?.close()
+      // Closing tears down the Browserbase session too. It can throw on an
+      // already-dropped socket, and that must not fail a run whose steps all
+      // succeeded — nor cost a retry, and another session, to do it again.
+      try {
+        await stagehand?.close()
+      } catch (error) {
+        logger.warn("Failed to close the Stagehand session", {
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
     }
 
     return { steps }
