@@ -49,6 +49,24 @@ export const runWorkflowTask = task({
 
     logger.log(`Running workflow ${workflow.name}`, { steps: order.length })
 
+    // Build the step list up front so the canvas can render the whole run —
+    // every node greyed out as "pending" — before any work starts.
+    const steps: RunStep[] = order.map((id) => {
+      const node = byId.get(id)!
+      return {
+        nodeId: id,
+        type: node.data.type,
+        title: node.data.title,
+        status: "pending",
+      }
+    })
+    // Steps carry an arbitrary executor `output`, which TypeScript can't prove
+    // is JSON-safe — the run's own return value has the same shape, so a single
+    // cast here keeps every publish site clean.
+    const publishSteps = () =>
+      metadata.set("steps", steps as unknown as Parameters<typeof metadata.set>[1])
+    publishSteps()
+
     // The browser session is created lazily — a graph with no browser nodes
     // should never pay for a Browserbase session.
     let browser: Awaited<ReturnType<typeof browserbase.launch>> | undefined
@@ -80,10 +98,9 @@ export const runWorkflowTask = task({
     const outputs: Record<string, unknown> = {}
 
     try {
-      for (const id of order) {
+      for (const [index, id] of order.entries()) {
         const node = byId.get(id)!
         logger.log(`Running Step: ${node.data.title}`)
-        // TODO: report each step's progress so the UI can watch the run live.
         const executor = nodeExecutors[node.data.type]
         if (!executor) continue
 
@@ -94,13 +111,43 @@ export const runWorkflowTask = task({
           ])
         )
 
-        outputs[id] = await executor({ values, getStagehand })
+        steps[index] = { ...steps[index], status: "running" }
+        publishSteps()
+        // Force the "running" state out now. Metadata is otherwise flushed on a
+        // background timer, so a fast executor would overwrite this with "done"
+        // before it ever left the run — and the canvas would never spin.
+        await metadata.flush()
+
+        const startedAt = Date.now()
+        try {
+          const output = await executor({ values, getStagehand })
+          outputs[id] = output
+          steps[index] = {
+            ...steps[index],
+            status: "done",
+            durationMs: Date.now() - startedAt,
+            output,
+          }
+          publishSteps()
+        } catch (error) {
+          steps[index] = {
+            ...steps[index],
+            status: "failed",
+            durationMs: Date.now() - startedAt,
+            error: error instanceof Error ? error.message : String(error),
+          }
+          publishSteps()
+          // A thrown run returns no output, so this flush is the only way the
+          // failed state ever reaches the canvas.
+          await metadata.flush()
+          throw error
+        }
       }
     } finally {
       await stagehand?.close()
       await browser?.close()
     }
 
-    return { step: order.length }
+    return { steps }
   },
 })
