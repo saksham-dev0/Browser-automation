@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useRef, useState, useTransition } from "react"
 import { useReactFlow, useStoreApi, useStore } from "@xyflow/react"
 import { MoreHorizontal, Play, Trash2 } from "lucide-react"
 import { toast } from "sonner"
@@ -27,6 +27,10 @@ import { cn } from "@/lib/utils"
 
 import { deleteWorkflowAction, runWorkflowAction } from "@/features/workflows/actions"
 import { validateGraph } from "@/features/workflows/lib/validate-graph"
+import {
+  useUpstreamConnections,
+  type UpstreamConnection,
+} from "@/features/workflows/hooks/use-upstream-connections"
 
 import {
   nodeRegistry,
@@ -90,31 +94,90 @@ function Section({
 
 // A single editor field for a node property. Fields marked multiline in the
 // registry render as a textarea; everything else stays a single-line input.
+type FieldControl = HTMLInputElement | HTMLTextAreaElement
+
 function Field({
   field,
   value,
   onChange,
+  onFocus,
+  ref,
 }: {
   field: NodeField
   value: string
   onChange: (value: string) => void
+  // Fires when the field takes focus, so Connections knows where a clicked
+  // chip's token should land.
+  onFocus: () => void
+  ref: (el: FieldControl | null) => void
 }) {
   const Control = field.multiline ? Textarea : Input
 
   return (
     <Control
       id={field.key}
+      ref={ref}
       value={value}
       placeholder={field.placeholder}
       className={cn(field.multiline && "min-h-24 resize-y")}
+      onFocus={onFocus}
       onChange={(e) => onChange(e.target.value)}
     />
+  )
+}
+
+// The Connections list under the fields: every output produced upstream of this
+// node, as a chip that drops its {{ }} token into the field being edited.
+function Connections({
+  connections,
+  onInsert,
+}: {
+  connections: UpstreamConnection[]
+  onInsert: (connection: UpstreamConnection) => void
+}) {
+  return (
+    <div className="flex flex-col gap-1.5 border-t border-border pt-3">
+      <Label className="text-xs">Connections</Label>
+      <div className="flex flex-wrap gap-1.5">
+        {connections.map((connection) => (
+          <button
+            key={connection.token}
+            type="button"
+            title={`Insert ${connection.token}`}
+            // Keeps the focused field focused, so the token lands at the caret
+            // the user left rather than at the end of the text.
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => onInsert(connection)}
+            className="flex items-center gap-1.5 rounded-full border border-border bg-card py-0.5 pr-2 pl-0.5 text-xs hover:bg-accent"
+          >
+            <NodeIcon type={connection.nodeType} className="size-4 rounded-full" />
+            {connection.label}
+          </button>
+        ))}
+      </div>
+    </div>
   )
 }
 
 // The Editor tab: one input per field on the selected node, or an empty state.
 function Inspector({ node }: { node: StepNodeType | undefined }) {
   const {updateNodeData} = useReactFlow<StepNodeType>()
+  const connections = useUpstreamConnections(node)
+
+  // The rendered controls, so an inserted token can go in at the caret and the
+  // field can keep focus afterwards.
+  const controls = useRef(new Map<string, FieldControl>())
+  // The field a chip inserts into: whichever was focused last, falling back to
+  // the node's first field.
+  const [activeKey, setActiveKey] = useState<string | null>(null)
+
+  // Editing a different node starts the fallback over.
+  const [prevNodeId, setPrevNodeId] = useState(node?.id)
+  if (node?.id !== prevNodeId) {
+    setPrevNodeId(node?.id)
+    setActiveKey(null)
+  }
+
   if (!node) {
     return (
       <Section title="Editor">
@@ -125,6 +188,30 @@ function Inspector({ node }: { node: StepNodeType | undefined }) {
 
   const { type, title, values } = node.data
   const def: NodeDefinition = nodeRegistry[type]
+
+  const setValue = (key: string, value: string) => {
+    updateNodeData(node.id, { values: { ...values, [key]: value } })
+  }
+
+  // Splices a chip's token into the target field at its caret (or at the end,
+  // when the field was never focused), then puts the caret after the token.
+  const insert = ({ token }: UpstreamConnection) => {
+    const key = activeKey ?? def.fields[0]?.key
+    if (!key) return
+
+    const value = values[key] ?? ""
+    const control = controls.current.get(key)
+    const start = control?.selectionStart ?? value.length
+    const end = control?.selectionEnd ?? value.length
+
+    setValue(key, value.slice(0, start) + token + value.slice(end))
+
+    const caret = start + token.length
+    requestAnimationFrame(() => {
+      control?.focus()
+      control?.setSelectionRange(caret, caret)
+    })
+  }
 
   return (
     <Section title={title} icon={<NodeIcon type={type} />}>
@@ -141,15 +228,18 @@ function Inspector({ node }: { node: StepNodeType | undefined }) {
               <Field
                 field={field}
                 value={values[field.key] ?? ""}
-                onChange={(value) => {
-                  updateNodeData(node.id, {
-                    values: { ...values, [field.key]: value },
-                  })
-                  void value
+                onChange={(value) => setValue(field.key, value)}
+                onFocus={() => setActiveKey(field.key)}
+                ref={(el) => {
+                  if (el) controls.current.set(field.key, el)
+                  else controls.current.delete(field.key)
                 }}
               />
             </div>
           ))
+        )}
+        {connections.length > 0 && (
+          <Connections connections={connections} onInsert={insert} />
         )}
       </div>
     </Section>

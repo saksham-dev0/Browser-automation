@@ -4,6 +4,7 @@ import { getWorkflow } from "@/features/workflows/data"
 import type { NodeType } from "@/features/workflows/nodes/node-registry"
 import { browserbase, Stagehand } from "@browserbasehq/stagehand"
 import { nodeExecutors } from "@/features/workflows/nodes/node-executors"
+import { interpolate } from "@/features/workflows/lib/interpolate"
 
 // One entry per node the run will walk, published to the run's metadata under
 // "steps" so the canvas — and the run console below it — can watch each node
@@ -72,14 +73,28 @@ export const runWorkflowTask = task({
       return stagehand
     }
 
+    // Every executed node's result, keyed by node id, so a later node can pull
+    // an earlier one's data through a {{ nodeId.path }} placeholder. Safe to
+    // read as we go: the toposort above guarantees anything referenced already
+    // ran.
+    const outputs: Record<string, unknown> = {}
+
     try {
       for (const id of order) {
         const node = byId.get(id)!
         logger.log(`Running Step: ${node.data.title}`)
-        // TODO: actually execute the node instead of just logging it, and report
-        // its progress so the UI can watch the run live.
+        // TODO: report each step's progress so the UI can watch the run live.
         const executor = nodeExecutors[node.data.type]
-        if(executor) await executor({ values: node.data.values, getStagehand })
+        if (!executor) continue
+
+        const values = Object.fromEntries(
+          Object.entries(node.data.values).map(([key, value]) => [
+            key,
+            interpolate(value, outputs),
+          ])
+        )
+
+        outputs[id] = await executor({ values, getStagehand })
       }
     } finally {
       await stagehand?.close()
