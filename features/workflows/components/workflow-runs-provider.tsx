@@ -59,28 +59,72 @@ function useWorkflowRuns() {
   return context
 }
 
+// A finished run's output is the source of truth — metadata is flushed on a
+// timer and can lag behind the last executor — so prefer the returned steps and
+// fall back to the live metadata while the run is still in flight.
+function stepsOf(run: WorkflowRun): RunStep[] {
+  return (
+    run.output?.steps ?? (run.metadata?.steps as RunStep[] | undefined) ?? []
+  )
+}
+
+// One run as the console renders it: the steps it walked, whether it is still
+// going, and the timings the row header shows.
+export type RunHistoryEntry = {
+  id: string
+  status: WorkflowRun["status"]
+  isLive: boolean
+  createdAt: Date
+  startedAt?: Date
+  finishedAt?: Date
+  // Wall-clock time the whole run took, as Trigger.dev measured it.
+  durationMs: number
+  // Set when the run itself failed — the message the console shows on the run
+  // row, above whichever step threw.
+  error?: string
+  steps: RunStep[]
+}
+
 /**
- * The steps of the most recent run, plus whether that run is still going.
- *
- * A finished run's output is the source of truth — metadata is flushed on a
- * timer and can lag behind the last executor — so prefer the returned steps and
- * fall back to the live metadata while the run is still in flight.
+ * Every run of this workflow with its steps, newest first — what the console
+ * under the canvas lists.
+ */
+export function useRunHistory(): {
+  runs: RunHistoryEntry[]
+  error?: Error
+} {
+  const { runs, error } = useWorkflowRuns()
+
+  return useMemo(
+    () => ({
+      error,
+      runs: [...runs]
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+        .map((run) => ({
+          id: run.id,
+          status: run.status,
+          isLive: LIVE_STATUSES.includes(run.status),
+          createdAt: run.createdAt,
+          startedAt: run.startedAt,
+          finishedAt: run.finishedAt,
+          durationMs: run.durationMs,
+          error: run.error?.message,
+          steps: stepsOf(run),
+        })),
+    }),
+    [runs, error]
+  )
+}
+
+/**
+ * The steps of the most recent run, plus whether that run is still going — what
+ * the canvas paints onto its nodes.
  */
 export function useLatestRunSteps(): { steps: RunStep[]; isLive: boolean } {
-  const { runs } = useWorkflowRuns()
+  const { runs } = useRunHistory()
+  const latest = runs[0]
 
-  return useMemo(() => {
-    const latest = runs.reduce<WorkflowRun | undefined>(
-      (newest, run) =>
-        !newest || run.createdAt > newest.createdAt ? run : newest,
-      undefined
-    )
-
-    if (!latest) return { steps: [], isLive: false }
-
-    const steps =
-      latest.output?.steps ?? (latest.metadata?.steps as RunStep[] | undefined)
-
-    return { steps: steps ?? [], isLive: LIVE_STATUSES.includes(latest.status) }
-  }, [runs])
+  return latest
+    ? { steps: latest.steps, isLive: latest.isLive }
+    : { steps: [], isLive: false }
 }

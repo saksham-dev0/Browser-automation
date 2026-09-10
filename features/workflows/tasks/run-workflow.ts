@@ -114,7 +114,14 @@ export const runWorkflowTask = task({
         const node = byId.get(id)!
         logger.log(`Running Step: ${node.data.title}`)
         const executor = nodeExecutors[node.data.type]
-        if (!executor) continue
+        // A node with no executor — the start trigger — does no work and has no
+        // output. Mark it done rather than leaving it "pending", which the
+        // console would show as a step that never ran.
+        if (!executor) {
+          steps[index] = { ...steps[index], status: "done", durationMs: 0 }
+          publishSteps()
+          continue
+        }
 
         const values = Object.fromEntries(
           Object.entries(node.data.values).map(([key, value]) => [
