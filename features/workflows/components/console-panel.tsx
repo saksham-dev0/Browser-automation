@@ -9,18 +9,21 @@ import {
 } from "@/components/ui/resizable"
 
 import { InspectorPanel } from "./inspector-panel"
-import { LogsPanel, isSameStep, type StepSelection } from "./logs-panel"
+import { LogsPanel, isSameSelection, type ConsoleSelection } from "./logs-panel"
 
 /**
- * The console under the canvas. It owns which step is selected — clicking a
- * step opens it, clicking the same one again closes it — so the runs list and
- * the output view beside it stay on the same step.
+ * The console under the canvas. It owns what is selected — a step or a run's
+ * replay, one at a time — so the runs list and the output view beside it stay
+ * in agreement. Clicking a row opens it, clicking the same one again closes
+ * it.
  */
 export function ConsolePanel() {
-  const [selected, setSelected] = useState<StepSelection | null>(null)
+  const [selected, setSelected] = useState<ConsoleSelection | null>(null)
 
-  const toggle = (selection: StepSelection) =>
-    setSelected((current) => (isSameStep(current, selection) ? null : selection))
+  const toggle = (selection: ConsoleSelection) =>
+    setSelected((current) =>
+      isSameSelection(current, selection) ? null : selection
+    )
 
   return (
     <ResizablePanelGroup orientation="horizontal" className="size-full">

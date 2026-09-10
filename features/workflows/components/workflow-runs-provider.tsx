@@ -83,6 +83,10 @@ export type RunHistoryEntry = {
   // row, above whichever step threw.
   error?: string
   steps: RunStep[]
+  // The Browserbase session the run drove, for the replay panel. Only set once
+  // the run has finished — it comes from the run's output, not the live
+  // metadata, because the recording lags the session close anyway.
+  browserbaseSessionId?: string
 }
 
 /**
@@ -110,6 +114,7 @@ export function useRunHistory(): {
           durationMs: run.durationMs,
           error: run.error?.message,
           steps: stepsOf(run),
+          browserbaseSessionId: run.output?.browserbaseSessionId,
         })),
     }),
     [runs, error]

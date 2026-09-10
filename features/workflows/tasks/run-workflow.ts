@@ -77,6 +77,9 @@ export const runWorkflowTask = task({
     // browser-side worker driven from this process, and Browserbase never sees
     // them.
     let stagehand: Stagehand | undefined
+    // The session the run drove, kept so it can be returned with the steps —
+    // the replay panel needs it to fetch the recording.
+    let browserbaseSessionId: string | undefined
     const getStagehand = async () => {
       if (stagehand) return stagehand
       const instance = new Stagehand({
@@ -96,10 +99,7 @@ export const runWorkflowTask = task({
       })
       await instance.init()
       stagehand = instance
-      // Surfaced on the run so the UI can deep-link to the live session replay.
-      if (instance.browserbaseSessionID) {
-        metadata.set("browserbaseSessionId", instance.browserbaseSessionID)
-      }
+      browserbaseSessionId = instance.browserbaseSessionID
       return instance
     }
 
@@ -175,6 +175,6 @@ export const runWorkflowTask = task({
       }
     }
 
-    return { steps }
+    return { steps, browserbaseSessionId }
   },
 })

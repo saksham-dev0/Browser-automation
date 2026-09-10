@@ -1,20 +1,44 @@
 "use client"
 
+import { PlayIcon } from "lucide-react"
+
 import { NodeIcon } from "./node-icon"
-import type { StepSelection } from "./logs-panel"
+import { SessionReplay } from "./session-replay"
+import type { ConsoleSelection } from "./logs-panel"
 import { useRunHistory } from "./workflow-runs-provider"
 
 /**
- * The console's detail pane: what the selected step produced — its output as
- * formatted JSON, or the error it threw. Rendered only while a step is
- * selected, so it always has a selection to resolve.
+ * The console's detail pane: what the selection produced — a step's output as
+ * formatted JSON or the error it threw, or the browser recording of a whole
+ * run. Rendered only while something is selected, so it always has a selection
+ * to resolve.
  */
-export function InspectorPanel({ selection }: { selection: StepSelection }) {
+export function InspectorPanel({ selection }: { selection: ConsoleSelection }) {
   const { runs } = useRunHistory()
 
-  const step = runs
-    .find((run) => run.id === selection.runId)
-    ?.steps.find((s) => s.nodeId === selection.nodeId)
+  const run = runs.find((candidate) => candidate.id === selection.runId)
+
+  if (selection.kind === "replay") {
+    // The row is only offered for a run that has a session id, so a missing one
+    // here means the run itself aged out of the realtime window.
+    if (!run?.browserbaseSessionId) {
+      return (
+        <Frame title="Replay">
+          <Note>Recording is no longer available</Note>
+        </Frame>
+      )
+    }
+
+    return (
+      <Frame title="Replay" icon={<PlayIcon className="size-3.5" />}>
+        <div className="p-3">
+          <SessionReplay sessionId={run.browserbaseSessionId} />
+        </div>
+      </Frame>
+    )
+  }
+
+  const step = run?.steps.find((s) => s.nodeId === selection.nodeId)
 
   // The selected run can drop out of the realtime window while its step is
   // open, so a missing step is a normal state rather than a bug.
@@ -29,7 +53,7 @@ export function InspectorPanel({ selection }: { selection: StepSelection }) {
   return (
     <Frame title={step.title} icon={<NodeIcon type={step.type} />}>
       {step.error ? (
-        <pre className="whitespace-pre-wrap break-words p-3 text-xs text-destructive">
+        <pre className="p-3 text-xs break-words whitespace-pre-wrap text-destructive">
           {step.error}
         </pre>
       ) : step.output === undefined ? (
@@ -41,7 +65,7 @@ export function InspectorPanel({ selection }: { selection: StepSelection }) {
               : "No output"}
         </Note>
       ) : (
-        <pre className="p-3 font-mono text-xs whitespace-pre-wrap break-words">
+        <pre className="p-3 font-mono text-xs break-words whitespace-pre-wrap">
           {JSON.stringify(step.output, null, 2)}
         </pre>
       )}
