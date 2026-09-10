@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react"
 import { useReactFlow, useStoreApi, useStore } from "@xyflow/react"
-import { MoreHorizontal, Play, Trash2 } from "lucide-react"
+import { MoreHorizontal, Play, Square, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
 import {
@@ -25,7 +25,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 
-import { deleteWorkflowAction, runWorkflowAction } from "@/features/workflows/actions"
+import {
+  cancelWorkflowRunAction,
+  deleteWorkflowAction,
+  runWorkflowAction,
+} from "@/features/workflows/actions"
 import { validateGraph } from "@/features/workflows/lib/validate-graph"
 import {
   useUpstreamConnections,
@@ -42,6 +46,7 @@ import {
 } from "@/features/workflows/nodes/node-registry"
 
 import { NodeIcon } from "./node-icon"
+import { useRunHistory } from "./workflow-runs-provider"
 
 // This file builds up to the RightSidebar component exported at the bottom: a
 // header with workflow actions (delete, run), then two tabs — a Toolbar for
@@ -373,17 +378,36 @@ function ActionsMenu({ workflowId }: { workflowId: string }) {
   )
 }
 
-// Kicks off a run of the current workflow.
+// Kicks off a run of the current workflow, and cancels it while it is in
+// flight. At most one run is live at a time, so the button is a plain toggle.
 function RunButton({workflowId}: {workflowId: string}) {
   const {getNodes, getEdges} = useReactFlow<StepNodeType>()
   const [isPending, startTransition] = useTransition()
+  const { runs } = useRunHistory()
+
+  // The run that just started, until the realtime subscription catches up —
+  // without it the button would flip back to Run for the moment between the
+  // trigger resolving and the new run reaching the provider.
+  const [startedId, setStartedId] = useState<string | null>(null)
+  if (startedId && runs.some((run) => run.id === startedId)) {
+    setStartedId(null)
+  }
+
+  const runId = runs.find((run) => run.isLive)?.id ?? startedId
+
   return (
     <Button
       size="sm"
-      variant="secondary"
+      variant={runId ? "destructive" : "secondary"}
       disabled={isPending}
       onClick={() => {
-        // TODO: validate the graph and run the workflow (toggle to Stop while running).
+        if (runId) {
+          startTransition(async () => {
+            await cancelWorkflowRunAction(runId)
+          })
+          return
+        }
+
         const graph = { nodes: getNodes(), edges: getEdges() }
         const problems = validateGraph(graph)
         if (problems.length > 0) {
@@ -392,12 +416,22 @@ function RunButton({workflowId}: {workflowId: string}) {
         }
 
         startTransition(async () => {
-          await runWorkflowAction({ id: workflowId, graph })
+          const handle = await runWorkflowAction({ id: workflowId, graph })
+          setStartedId(handle.id)
         })
       }}
     >
-      <Play fill="primary" />
-      Run
+      {runId ? (
+        <>
+          <Square fill="currentColor" />
+          Stop
+        </>
+      ) : (
+        <>
+          <Play fill="primary" />
+          Run
+        </>
+      )}
     </Button>
   )
 }
