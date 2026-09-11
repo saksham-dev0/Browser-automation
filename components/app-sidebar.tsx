@@ -1,6 +1,7 @@
 import { OrganizationSwitcher, UserButton } from "@clerk/nextjs"
 import { auth } from "@clerk/nextjs/server"
 
+import { BillingNav } from "@/features/billing/components/billing-nav"
 import { createWorkflowAction } from "@/features/workflows/actions"
 import { WorkflowNav } from "@/features/workflows/components/workflow-nav"
 import { listWorkflows } from "@/features/workflows/data"
@@ -43,7 +44,8 @@ export async function AppSidebar({
           createWorkflowAction={createWorkflowAction}
         />
       </SidebarContent>
-      <SidebarFooter className="p-2 group-data-[collapsible=icon]:items-center">
+      <SidebarFooter className="gap-2 p-2 group-data-[collapsible=icon]:items-center">
+        <BillingNav />
         <UserButton showName={false} />
       </SidebarFooter>
     </Sidebar>

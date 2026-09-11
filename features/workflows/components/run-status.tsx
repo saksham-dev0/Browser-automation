@@ -5,8 +5,6 @@ import { CheckCircle2Icon, LoaderIcon, XCircleIcon } from "lucide-react"
 
 import { Progress } from "@/components/ui/progress"
 
-import type { helloWorldTask } from "@/trigger/example"
-
 const TERMINAL_STATUSES = [
   "COMPLETED",
   "CANCELED",
@@ -26,7 +24,7 @@ export function RunStatus({
   accessToken: string
   onFinished?: () => void
 }) {
-  const { run, error } = useRealtimeRun<typeof helloWorldTask>(runId, {
+  const { run, error } = useRealtimeRun(runId, {
     accessToken,
     skipColumns: ["payload"],
     onComplete: () => onFinished?.(),
