@@ -36,6 +36,9 @@ export type NodeDefinition = {
   accent: string // Tailwind classes for the icon chip color
   fields: NodeField[]
   outputs: NodeOutput[]
+  // Adding this node to a canvas requires a paid plan. The toolbar locks it and
+  // `runWorkflowAction` re-checks it server-side.
+  premium?: boolean
 }
 
 export const nodeRegistry = {
@@ -128,6 +131,7 @@ export const nodeRegistry = {
     label: "Agent",
     icon: Bot,
     accent: "bg-rose-500 text-white",
+    premium: true,
     fields: [
       {
         key: "instruction",
@@ -166,6 +170,13 @@ export const nodeRegistry = {
 } satisfies Record<string, NodeDefinition>
 
 export type NodeType = keyof typeof nodeRegistry
+
+// `satisfies` keeps each entry's literal type, so optional keys like `premium`
+// are absent from the entries that omit them. This widens one back to the full
+// manifest shape for code that reads those optional fields.
+export function getNodeDefinition(type: NodeType): NodeDefinition {
+  return nodeRegistry[type]
+}
 
 // Plain JSON only (synced through Liveblocks later). type keys into the registry;
 // kind and title are denormalized so the server can read them without the registry.

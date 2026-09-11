@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm"
+import { and, count, desc, eq } from "drizzle-orm"
 
 import { db } from "@/lib/db"
 import { workflows, WorkflowGraph } from "@/lib/db/schema"
@@ -27,6 +27,15 @@ export function listWorkflows(orgId: string) {
     .from(workflows)
     .where(eq(workflows.orgId, orgId))
     .orderBy(desc(workflows.createdAt))
+}
+
+export async function countWorkflows(orgId: string) {
+  const [row] = await db
+    .select({ value: count() })
+    .from(workflows)
+    .where(eq(workflows.orgId, orgId))
+
+  return row?.value ?? 0
 }
 
 export async function createWorkflow(orgId: string, name: string) {

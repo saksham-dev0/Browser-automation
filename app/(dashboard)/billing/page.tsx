@@ -4,6 +4,7 @@ import { PlanCard } from "@/features/billing/components/plan-card"
 import { SubscriptionSummary } from "@/features/billing/components/subscription-summary"
 import { getEntitlement } from "@/features/billing/lib/entitlement"
 import { paidPlans } from "@/features/billing/plans"
+import { getWorkflowLimit } from "@/features/workflows/lib/workflow-limit"
 import { Separator } from "@/components/ui/separator"
 
 export default async function BillingPage() {
@@ -19,7 +20,10 @@ export default async function BillingPage() {
     )
   }
 
-  const entitlement = await getEntitlement(orgId)
+  const [entitlement, workflowLimit] = await Promise.all([
+    getEntitlement(orgId),
+    getWorkflowLimit(orgId),
+  ])
   // Billing belongs to the org, so members can see the plan but not change it.
   const canManage = has({ role: "org:admin" })
 
@@ -34,6 +38,15 @@ export default async function BillingPage() {
         </header>
 
         <SubscriptionSummary entitlement={entitlement} canManage={canManage} />
+
+        {workflowLimit.limit === null ? null : (
+          <div className="flex items-center justify-between rounded-lg border px-4 py-3 text-sm">
+            <span>Workflows</span>
+            <span className="text-muted-foreground">
+              {workflowLimit.used} of {workflowLimit.limit} used
+            </span>
+          </div>
+        )}
 
         <Separator />
 

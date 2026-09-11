@@ -5,6 +5,14 @@
  */
 export type PlanId = "free" | "pro"
 
+/**
+ * Per-plan caps. `null` means unlimited. Add a key here and every plan must
+ * declare it, so a new limit cannot silently default to unlimited.
+ */
+export type PlanLimits = {
+  workflows: number | null
+}
+
 export type Plan = {
   id: PlanId
   name: string
@@ -13,6 +21,7 @@ export type Plan = {
   price: string
   interval: string
   features: string[]
+  limits: PlanLimits
   /** Dodo product id. `null` for plans that are never checked out. */
   productId: string | null
 }
@@ -27,10 +36,11 @@ export const plans = {
     price: "$0",
     interval: "forever",
     features: [
-      "Unlimited workflow drafts",
+      "Up to 2 workflows",
       "Manual workflow runs",
       "Run history and session replays",
     ],
+    limits: { workflows: 2 },
     productId: null,
   },
   pro: {
@@ -41,10 +51,12 @@ export const plans = {
     interval: "per month",
     features: [
       "Everything in Free",
+      "Unlimited workflows",
       "Unlimited workflow runs",
       "Scheduled and triggered runs",
       "Priority support",
     ],
+    limits: { workflows: null },
     productId: process.env.DODO_PRO_PRODUCT_ID ?? null,
   },
 } satisfies Record<PlanId, Plan>

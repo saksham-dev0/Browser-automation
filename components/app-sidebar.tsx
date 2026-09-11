@@ -5,6 +5,7 @@ import { BillingNav } from "@/features/billing/components/billing-nav"
 import { createWorkflowAction } from "@/features/workflows/actions"
 import { WorkflowNav } from "@/features/workflows/components/workflow-nav"
 import { listWorkflows } from "@/features/workflows/data"
+import { getWorkflowLimit } from "@/features/workflows/lib/workflow-limit"
 import {
   Sidebar,
   SidebarContent,
@@ -17,7 +18,9 @@ export async function AppSidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar>) {
   const { orgId } = await auth()
-  const workflows = orgId ? await listWorkflows(orgId) : []
+  const [workflows, workflowLimit] = orgId
+    ? await Promise.all([listWorkflows(orgId), getWorkflowLimit(orgId)])
+    : [[], null]
 
   return (
     <Sidebar variant="inset" collapsible="icon" {...props}>
@@ -39,10 +42,13 @@ export async function AppSidebar({
         <SidebarTrigger />
       </SidebarHeader>
       <SidebarContent>
-        <WorkflowNav
-          workflows={workflows}
-          createWorkflowAction={createWorkflowAction}
-        />
+        {workflowLimit ? (
+          <WorkflowNav
+            workflows={workflows}
+            workflowLimit={workflowLimit}
+            createWorkflowAction={createWorkflowAction}
+          />
+        ) : null}
       </SidebarContent>
       <SidebarFooter className="gap-2 p-2 group-data-[collapsible=icon]:items-center">
         <BillingNav />

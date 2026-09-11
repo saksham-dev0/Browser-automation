@@ -1,8 +1,9 @@
 "use client"
 
 import { useRef, useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
 import { useReactFlow, useStoreApi, useStore } from "@xyflow/react"
-import { MoreHorizontal, Play, Square, Trash2 } from "lucide-react"
+import { Lock, MoreHorizontal, Play, Square, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
 import {
@@ -11,6 +12,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -25,6 +27,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 
+import { useProGate } from "@/features/billing/components/entitlement-provider"
 import {
   cancelWorkflowRunAction,
   deleteWorkflowAction,
@@ -37,6 +40,7 @@ import {
 } from "@/features/workflows/hooks/use-upstream-connections"
 
 import {
+  getNodeDefinition,
   nodeRegistry,
   type NodeDefinition,
   type NodeField,
@@ -247,7 +251,7 @@ const sections: { kind: StepNodeKind; label: string }[] = [
 ]
 
 // Every node type from the registry, filtered into the groups below.
-const definitions = Object.values(nodeRegistry)
+const definitions: NodeDefinition[] = Object.values(nodeRegistry)
 
 // Nodes of the same type are numbered so they stay easy to tell apart ("Open URL
 // 1", "Open URL 2"). Numbering resumes after the highest number in use, so
@@ -270,10 +274,16 @@ function Palette() {
   // onNodesChange, which is how the new node reaches Liveblocks.
   const { addNodes, getNodes, getViewport } = useReactFlow<StepNodeType>()
   const store = useStoreApi()
+  const { isPro, requirePro } = useProGate()
 
   const add = (type: NodeType) => {
-    const def = nodeRegistry[type]
+    const def = getNodeDefinition(type)
     const nodes = getNodes()
+
+    // Premium nodes cost real money to run, so a free org is sent to billing
+    // instead of getting the node. `runWorkflowAction` enforces the same rule
+    // server-side, where the plan cannot be forged.
+    if (def.premium && !requirePro(`The ${def.label} node`)) return
 
     if (def.kind === "trigger" && nodes.some((n) => n.data.kind === "trigger")) {
       toast.error("A workflow can only have one trigger")
@@ -318,17 +328,34 @@ function Palette() {
             <AccordionContent className="flex flex-col gap-0.5">
               {definitions
                 .filter((def) => def.kind === section.kind)
-                .map((def) => (
-                  <Button
-                    key={def.type}
-                    variant="ghost"
-                    onClick={() => add(def.type as NodeType)}
-                    className="justify-start gap-2.5 px-1.5 text-xs"
-                  >
-                    <NodeIcon type={def.type as NodeType} />
-                    {def.label}
-                  </Button>
-                ))}
+                .map((def) => {
+                  // Locked nodes stay clickable: the click is the upgrade prompt.
+                  const locked = Boolean(def.premium) && !isPro
+
+                  return (
+                    <Button
+                      key={def.type}
+                      variant="ghost"
+                      onClick={() => add(def.type as NodeType)}
+                      className="justify-start gap-2.5 px-1.5 text-xs"
+                      title={locked ? `${def.label} is a Pro feature` : undefined}
+                    >
+                      <NodeIcon
+                        type={def.type as NodeType}
+                        className={cn(locked && "opacity-50 grayscale")}
+                      />
+                      <span className={cn(locked && "text-muted-foreground")}>
+                        {def.label}
+                      </span>
+                      {locked ? (
+                        <Badge variant="outline" className="ml-auto gap-1 px-1.5">
+                          <Lock />
+                          Pro
+                        </Badge>
+                      ) : null}
+                    </Button>
+                  )
+                })}
             </AccordionContent>
           </AccordionItem>
         ))}
@@ -384,6 +411,7 @@ function RunButton({workflowId}: {workflowId: string}) {
   const {getNodes, getEdges} = useReactFlow<StepNodeType>()
   const [isPending, startTransition] = useTransition()
   const { runs } = useRunHistory()
+  const router = useRouter()
 
   // The run that just started, until the realtime subscription catches up —
   // without it the button would flip back to Run for the moment between the
@@ -416,8 +444,17 @@ function RunButton({workflowId}: {workflowId: string}) {
         }
 
         startTransition(async () => {
-          const handle = await runWorkflowAction({ id: workflowId, graph })
-          setStartedId(handle.id)
+          const result = await runWorkflowAction({ id: workflowId, graph })
+
+          // A plan refusal comes back as a message rather than a run handle.
+          if ("error" in result) {
+            toast.error(result.error, {
+              action: { label: "Upgrade", onClick: () => router.push("/billing") },
+            })
+            return
+          }
+
+          setStartedId(result.id)
         })
       }}
     >

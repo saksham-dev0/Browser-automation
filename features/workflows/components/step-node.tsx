@@ -1,8 +1,10 @@
 import { memo } from "react"
 import { Handle, Position, type NodeProps } from "@xyflow/react"
+import { Lock } from "lucide-react"
 
+import { useProGate } from "@/features/billing/components/entitlement-provider"
 import {
-  nodeRegistry,
+  getNodeDefinition,
   type StepNodeType,
 } from "@/features/workflows/nodes/node-registry"
 import { Spinner } from "@/components/ui/spinner"
@@ -12,9 +14,14 @@ import { useLatestRunSteps } from "./workflow-runs-provider"
 
 function StepNodeComponent({ id, data, selected }: NodeProps<StepNodeType>) {
   const { type, kind, title, values } = data
-  const def = nodeRegistry[type]
+  const def = getNodeDefinition(type)
   const Icon = def.icon
   const fields = def.fields.filter((field) => values[field.key])
+
+  const { isPro } = useProGate()
+  // A premium node left behind by a lapsed subscription. It stays on the canvas
+  // and keeps its data; it just cannot run until the org upgrades.
+  const locked = Boolean(def.premium) && !isPro
 
   const { steps, isLive } = useLatestRunSteps()
   const status = steps.find((step) => step.nodeId === id)?.status
@@ -32,6 +39,7 @@ function StepNodeComponent({ id, data, selected }: NodeProps<StepNodeType>) {
         "min-w-50 max-w-80 rounded-(--radius) border-2 border-border bg-card text-card-foreground",
         isRunning && "border-blue-500",
         isFailed && "border-destructive",
+        locked && "border-dashed opacity-60",
         selected && "ring-2 ring-ring ring-offset-2 ring-offset-background"
       )}
     >
@@ -54,6 +62,15 @@ function StepNodeComponent({ id, data, selected }: NodeProps<StepNodeType>) {
           {isRunning ? <Spinner className="size-4" /> : <Icon className="size-4" />}
         </div>
         <span className="text-sm font-semibold">{title}</span>
+        {locked && (
+          <span
+            title={`${def.label} is a Pro feature. Upgrade to run this workflow.`}
+            className="ml-auto flex items-center gap-1 rounded-full border border-border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+          >
+            <Lock className="size-2.5" />
+            Pro
+          </span>
+        )}
       </div>
 
       {fields.length > 0 && (
